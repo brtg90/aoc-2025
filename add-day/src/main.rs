@@ -90,11 +90,11 @@ fn setup_cargo_toml(path: &PathBuf) -> Result<()> {
 }
 
 fn add_input_files(day: &str) -> Result<()> {
-    if !fs::exists("/inputs")? {
-        fs::create_dir("/inputs")?;
+    if !fs::exists("inputs")? {
+        fs::create_dir("inputs")?;
     }
 
-    for i in 0..3 {
+    for i in 0..2 {
         let filename = format!("{day}pt{}.txt", i + 1);
         fs::File::create(format!("inputs/{filename}"))?;
     }
