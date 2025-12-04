@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use utils::read_lines;
 
 const NEIGHBOR_STEPS: [(isize, isize);8] = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1)];
@@ -19,27 +21,44 @@ fn part_1() {
 
 fn part_2() {
     let (papers, (width, height)) = parse_paper_locations("inputs/day04pt1.txt");
-    let count = recursive_remove_neighbors(&papers, width, height);
+    let neighbors = get_neighbor_map(&papers, width, height);
+    let count = recursive_remove_neighbors(neighbors);
     println!("Part 2: {:?}", count);
 }
 
-fn recursive_remove_neighbors(papers: &[(isize, isize)], width: isize, height: isize) -> usize {
+fn get_neighbor_map(papers: &[(isize, isize)], width: isize, height: isize) -> HashMap<(isize, isize), Vec<(isize, isize)>> {
+    let mut map = HashMap::new();
+    papers.iter()
+        .for_each(|&pos| {
+            let neighbors = get_neighbors(pos, papers, width, height);
+            map.insert(pos, neighbors);
+        });
+    map
+}
+
+fn recursive_remove_neighbors(mut neighbors: HashMap<(isize, isize), Vec<(isize, isize)>>) -> usize {
     let mut count = 0;
 
-    let remove = papers.iter()
-        .filter(|&p| get_neighbors(*p, &papers, width, height).len() < 4)
+    let remove = neighbors.iter()
+        .filter(|(_, neighbors_vec)| neighbors_vec.len() < 4)
+        .map(|(&pos, _)| pos)
         .collect::<Vec<_>>();
 
     if remove.is_empty() {
         return count;
     }
+
     count += remove.len();
 
-    let papers = papers.iter().copied()
-        .filter(|p| !remove.contains(&p))
-        .collect::<Vec<_>>();
+    remove.iter()
+        .for_each(|x| {neighbors.remove(x); });
 
-    count + recursive_remove_neighbors(&papers, width, height)
+    neighbors.iter_mut()
+        .for_each(|(_, mut neighbor_vec)| {
+            neighbor_vec.retain(|x| !remove.contains(x));
+        });
+
+    return count + recursive_remove_neighbors(neighbors);
 }
 
 fn get_neighbors(position: (isize, isize), papers: &[(isize, isize)], width: isize, height: isize) -> Vec<(isize, isize)> {
