@@ -54,22 +54,22 @@ fn recursive_remove_neighbors(mut neighbors: HashMap<(isize, isize), Vec<(isize,
         .for_each(|x| {neighbors.remove(x); });
 
     neighbors.iter_mut()
-        .for_each(|(_, mut neighbor_vec)| {
+        .for_each(|(_, neighbor_vec)| {
             neighbor_vec.retain(|x| !remove.contains(x));
         });
 
-    return count + recursive_remove_neighbors(neighbors);
+    count + recursive_remove_neighbors(neighbors)
 }
 
 fn get_neighbors(position: (isize, isize), papers: &[(isize, isize)], width: isize, height: isize) -> Vec<(isize, isize)> {
-    let neighbors = get_valid_neighbors(position, papers, width, height);
+    let neighbors = get_valid_neighbors(position, width, height);
     neighbors.iter()
-        .filter(|neighbor| papers.contains(&neighbor))
+        .filter(|neighbor| papers.contains(neighbor))
         .cloned()
         .collect()
 }
 
-fn get_valid_neighbors(position: (isize, isize), papers: &[(isize, isize)], width: isize, height: isize) -> Vec<(isize, isize)> {
+fn get_valid_neighbors(position: (isize, isize), width: isize, height: isize) -> Vec<(isize, isize)> {
     NEIGHBOR_STEPS.iter()
         .map(|(drow, dcol)| (position.0 + drow, position.1 + dcol))
         .filter(|&(x, y)| x >= 0 && x < height && y >= 0 && y < width)
