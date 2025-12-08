@@ -1,5 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use utils::read_lines;
+
+type DistanceHeap = BinaryHeap<(isize, usize, usize)>;
 
 fn main() {
     part_1();
@@ -7,8 +9,8 @@ fn main() {
 }
 
 fn part_1() {
-    let boxes = parse("inputs/day08pt2.txt");
-    let distances = calculate_distances(&boxes);
+    let boxes = parse("inputs/day08pt1.txt");
+    let distances = build_distance_heap(&boxes);
     let product = group_boxes(distances, &boxes);
 
     println!("Part 1: {:?}", product);
@@ -18,11 +20,11 @@ fn part_2() {
     println!("Part 2: {:?}", 0);
 }
 
-fn group_boxes(mut distances: HashMap<usize, HashMap<usize, isize>>, boxes:&[Vec<isize>]) -> usize {
+fn group_boxes(mut distances: DistanceHeap, boxes:&[Vec<isize>]) -> usize {
     let mut groups: HashMap<usize, HashSet<usize>> = HashMap::new();
 
     for _ in 0..1000 {
-        let (min_idx, min_combination) = find_minimum_distance(&distances);
+        let (_, min_idx, min_combination) = distances.pop().unwrap();
         println!("Combination found between {:?} and {:?}", boxes[min_combination], boxes[min_idx]);
         let already_containing: Vec<usize> = groups.iter()
             .filter(|(k, v)| v.contains(&min_idx) || v.contains(&min_combination))
@@ -39,15 +41,10 @@ fn group_boxes(mut distances: HashMap<usize, HashMap<usize, isize>>, boxes:&[Vec
         groups.entry(min_idx)
             .and_modify(|v| {v.insert(min_combination);})
             .or_insert(HashSet::from([min_combination, min_idx]));
-
-        distances.entry(min_idx)
-            .and_modify(|v| {
-                v.remove(&min_combination);
-            });
     }
 
     let mut changed = true;
-    println!("Groups {:?}", groups);
+
     while changed {
         changed = false;
 
@@ -85,7 +82,6 @@ fn group_boxes(mut distances: HashMap<usize, HashMap<usize, isize>>, boxes:&[Vec
         }
     }
 
-    println!("groups: {:?}", groups);
 
     let mut sizes = groups.values()
         .map(|v| v.len())
@@ -113,16 +109,17 @@ fn find_minimum_distance(distances: &HashMap<usize, HashMap<usize, isize>>) -> (
     (min_distances[0].0, *min_distances[0].1.0)
 }
 
-fn calculate_distances(boxes: &[Vec<isize>]) -> HashMap<usize, HashMap<usize, isize>> {
-    let mut distances: HashMap<usize, HashMap<usize, isize>> = HashMap::new();
-    for (i, box_i) in boxes.iter().enumerate() {
-        let mut box_distances: HashMap<usize, isize> = HashMap::new();
-        for (j, box_j) in boxes.iter().enumerate().skip(i + 1) {
-            box_distances.insert(j, calc_distance_square(box_i, box_j));
+fn build_distance_heap(boxes: &[Vec<isize>]) -> DistanceHeap {
+    let mut heap = BinaryHeap::new();
+
+    for i in 0..boxes.len() {
+        for j in i + 1.. boxes.len() {
+            let distance = calc_distance_square(&boxes[i], &boxes[j]);
+            // The binary heap is a max heap so store negative distance squared
+            heap.push((-distance, i, j));
         }
-        distances.insert(i, box_distances);
     }
-    distances
+    heap
 }
 
 fn calc_distance_square(box_1: &[isize], box_2: &[isize]) -> isize {
