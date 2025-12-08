@@ -4,45 +4,48 @@ use utils::read_lines;
 type DistanceHeap = BinaryHeap<(isize, usize, usize)>;
 
 fn main() {
-    part_1();
-    part_2();
-}
-
-fn part_1() {
     let boxes = parse("inputs/day08pt1.txt");
     let distances = build_distance_heap(&boxes);
-    let product = group_boxes(distances, &boxes);
+    let (groups, distances) = part_1(distances);
+    part_2(&boxes, groups, distances);
+}
+
+fn part_1(distances: DistanceHeap) -> (HashMap<usize, HashSet<usize>>, DistanceHeap) {
+    let (mut groups, distances) = group_boxes_1000_times(distances);
+    groups = optimize_groups(groups);
+    let product = get_product_largest_groups(&groups);
 
     println!("Part 1: {:?}", product);
+
+    (groups, distances)
 }
 
-fn part_2() {
-    println!("Part 2: {:?}", 0);
-}
+fn part_2(boxes: &[Vec<isize>], mut groups: HashMap<usize, HashSet<usize>>, mut distances: DistanceHeap) {
+    let mut id_0 = 0;
+    let mut id_1 = 0;
 
-fn group_boxes(mut distances: DistanceHeap, boxes:&[Vec<isize>]) -> usize {
-    let mut groups: HashMap<usize, HashSet<usize>> = HashMap::new();
-
-    for _ in 0..1000 {
-        let (_, min_idx, min_combination) = distances.pop().unwrap();
-        println!("Combination found between {:?} and {:?}", boxes[min_combination], boxes[min_idx]);
-        let already_containing: Vec<usize> = groups.iter()
-            .filter(|(k, v)| v.contains(&min_idx) || v.contains(&min_combination))
-            .map(|(k, _)| *k)
-            .collect();
-
-        if !already_containing.is_empty() {
-            groups.entry(already_containing[0])
-                .and_modify(|v| {
-                    v.insert(min_idx);
-                    v.insert(min_combination);
-                });
+    loop {
+        if groups.len() == 1 && groups.values().all(|v| v.len() == boxes.len()) {
+            break;
         }
-        groups.entry(min_idx)
-            .and_modify(|v| {v.insert(min_combination);})
-            .or_insert(HashSet::from([min_combination, min_idx]));
+        (groups, distances, (id_0, id_1)) = group_boxes(distances, groups);
+        groups = optimize_groups(groups);
     }
+    let product = boxes[id_0][0] * boxes[id_1][0];
+    println!("Part 2: {:?}", product);
+}
 
+fn get_product_largest_groups(groups: &HashMap<usize, HashSet<usize>>) -> usize {
+    let mut sizes = groups.values()
+        .map(|v| v.len())
+        .collect::<Vec<usize>>();
+
+    sizes.sort();
+    sizes.reverse();
+    sizes[0] * sizes[1] * sizes[2]
+}
+
+fn optimize_groups(mut groups: HashMap<usize, HashSet<usize>>) -> HashMap<usize, HashSet<usize>> {
     let mut changed = true;
 
     while changed {
@@ -81,32 +84,38 @@ fn group_boxes(mut distances: DistanceHeap, boxes:&[Vec<isize>]) -> usize {
             }
         }
     }
-
-
-    let mut sizes = groups.values()
-        .map(|v| v.len())
-        .collect::<Vec<usize>>();
-
-    sizes.sort();
-    sizes.reverse();
-    sizes[0] * sizes[1] * sizes[2]
+    groups
 }
 
-fn find_minimum_distance(distances: &HashMap<usize, HashMap<usize, isize>>) -> (usize, usize) {
-    let mut min_distances = distances.iter()
-        .filter(|(_, v)| !v.is_empty())
-        .map(|(&k, v)|
-                 {
-                     let mut map_pair = v.iter()
-                         .map(|(k, v)| (k, v))
-                         .collect::<Vec<(&usize, &isize)>>();
-                     map_pair.sort_by_key(|(_, v)| *v);
-                     (k, map_pair[0])
-                 })
-        .collect::<Vec<_>>();
+fn group_boxes(mut distances: DistanceHeap, mut groups: HashMap<usize, HashSet<usize>>) -> (HashMap<usize, HashSet<usize>>, DistanceHeap, (usize, usize)) {
+    let (_, min_idx, min_combination) = distances.pop().unwrap();
+    let already_containing: Vec<usize> = groups.iter()
+        .filter(|(_, v)| v.contains(&min_idx) || v.contains(&min_combination))
+        .map(|(k, _)| *k)
+        .collect();
 
-    min_distances.sort_by_key(|(_, v)| *v.1);
-    (min_distances[0].0, *min_distances[0].1.0)
+    if !already_containing.is_empty() {
+        groups.entry(already_containing[0])
+            .and_modify(|v| {
+                v.insert(min_idx);
+                v.insert(min_combination);
+            });
+    }
+    groups.entry(min_idx)
+        .and_modify(|v| {v.insert(min_combination);})
+        .or_insert(HashSet::from([min_combination, min_idx]));
+
+    (groups, distances, (min_idx, min_combination))
+}
+
+fn group_boxes_1000_times(mut distances: DistanceHeap) -> (HashMap<usize, HashSet<usize>>, DistanceHeap) {
+    let mut groups: HashMap<usize, HashSet<usize>> = HashMap::new();
+
+    for _ in 0..1000 {
+        (groups, distances, _) = group_boxes(distances, groups);
+    }
+
+    (groups, distances)
 }
 
 fn build_distance_heap(boxes: &[Vec<isize>]) -> DistanceHeap {
