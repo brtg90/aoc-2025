@@ -16,9 +16,6 @@ fn part_2() {
 }
 
 fn find_maximum_tiles_between_points(grid: &[(isize, isize)]) -> isize {
-    let mut corner_0 = (0, 0);
-    let mut corner_1 = (0, 0);
-
     let mut max = 0;
 
     for (i, p0) in grid.iter().enumerate() {
@@ -26,12 +23,10 @@ fn find_maximum_tiles_between_points(grid: &[(isize, isize)]) -> isize {
             let tiles = ((p0.0 - p1.0).abs() + 1) * ((p0.1 - p1.1).abs() + 1);
             if tiles > max {
                 max = tiles;
-                corner_0 = *p0;
-                corner_1 = *p1;
             }
         }
     }
-    println!("Corners: {:?} {:?}", corner_0, corner_1);
+    
     max
 }
 
