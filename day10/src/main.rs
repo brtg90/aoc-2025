@@ -56,12 +56,77 @@ impl Machine {
     fn get_num_lights(&self) -> usize {
         *self.buttons.iter().flatten().max().unwrap()
     }
+
+    fn get_rref(&self) -> Vec<Vec<f64>> {
+        let num_lights = self.get_num_lights();
+        let mut rref: Vec<Vec<f64>> = vec![vec![0.0; self.buttons.len() + 1]; num_lights + 1];
+
+        // Initialize values
+        for (col, button) in self.buttons.iter().enumerate() {
+            button.iter()
+                .for_each(|&n| {
+                rref[n][col] = 1.0;
+            });
+        }
+
+        self.joltage.iter()
+            .enumerate()
+            .for_each(|(i, &l)| rref[i][self.buttons.len()] = l as f64);
+        println!("Original: {:?}", rref);
+
+        rref = Self::calculate_reduced_row_echelon_form(rref);
+        println!("rref: {:?}", rref);
+        rref
+    }
+
+    fn calculate_reduced_row_echelon_form(mut rref: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
+        let mut pivot = 0;
+        let mut rows = rref.len();
+        let mut cols = rref[0].len();
+
+        'outer: for row in 0..rows {
+            if pivot >= cols {
+                break;
+            }
+            let mut row_comp = row;
+            while rref[row_comp][pivot] == 0.0 {
+                row_comp += 1;
+                if row_comp == rows {
+                    row_comp = row;
+                    pivot += 1;
+                    if pivot == cols {
+                        break 'outer;
+                    }
+                }
+            }
+            rref.swap(row, row_comp);
+            let value = rref[row][pivot];
+            if value != 0.0 {
+                for col in 0..cols {
+                    rref[row][col] /= value;
+                }
+            }
+
+            for row_i in 0..rows {
+                if row_i == row {
+                    continue;
+                }
+                let value = rref[row_i][pivot];
+                for col in 0..cols {
+                    rref[row_i][col] -= value * rref[row][col];
+                }
+            }
+            pivot += 1;
+        }
+
+        rref
+    }
 }
 
 fn main() {
-    let machines = parse_machines("inputs/day10pt1.txt");
+    let machines = parse_machines("inputs/day10pt2.txt");
     part_1(&machines);
-    part_2();
+    part_2(&machines);
 }
 
 fn parse_machines(filename: &str) -> Vec<Machine> {
@@ -78,7 +143,10 @@ fn part_1(machines: &[Machine]) {
     println!("Part 1: {:?}", sum);
 }
 
-fn part_2() {
+fn part_2(machines: &[Machine]) {
+    for machine in machines {
+        machine.get_rref();
+    }
     println!("Part 2: {:?}", 0);
 }
 
