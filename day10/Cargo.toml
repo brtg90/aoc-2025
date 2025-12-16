@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 utils = { path = "../utils" }
 regex = { version = "1.12.2" }
+num-rational = "0.4.2"

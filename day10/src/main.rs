@@ -1,3 +1,5 @@
+use std::env::var;
+use num_rational::Rational64;
 use regex::Regex;
 
 use utils::read_lines;
@@ -57,39 +59,48 @@ impl Machine {
         *self.buttons.iter().flatten().max().unwrap()
     }
 
-    fn get_rref(&self) -> Vec<Vec<f64>> {
+    fn solve_joltage_presses(&self) -> usize {
+        let rref = self.get_rref();
+        let pivots = Self::get_pivots(&rref);
+        println!("pivots: {:?}", pivots);
+        let constraints = Self::get_constraints(&rref, &pivots);
+        0
+    }
+
+    fn get_rref(&self) -> Vec<Vec<Rational64>> {
         let num_lights = self.get_num_lights();
-        let mut rref: Vec<Vec<f64>> = vec![vec![0.0; self.buttons.len() + 1]; num_lights + 1];
+        let mut rref: Vec<Vec<Rational64>> = vec![vec![Rational64::from_integer(0); self.buttons.len() + 1]; num_lights + 1];
 
         // Initialize values
         for (col, button) in self.buttons.iter().enumerate() {
             button.iter()
                 .for_each(|&n| {
-                rref[n][col] = 1.0;
+                rref[n][col] = Rational64::from_integer(1);
             });
         }
 
         self.joltage.iter()
             .enumerate()
-            .for_each(|(i, &l)| rref[i][self.buttons.len()] = l as f64);
-        println!("Original: {:?}", rref);
+            .for_each(|(i, &l)| rref[i][self.buttons.len()] = Rational64::from_integer(l as i64));
+        // println!("Original: {:?}", Self::convert_rref_to_int(&rref));
 
         rref = Self::calculate_reduced_row_echelon_form(rref);
-        println!("rref: {:?}", rref);
+        // println!("{:?}", rref);
+        // println!("Pivots {:?}", Self::get_pivots(&rref));
         rref
     }
 
-    fn calculate_reduced_row_echelon_form(mut rref: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
+    fn calculate_reduced_row_echelon_form(mut rref: Vec<Vec<Rational64>>) -> Vec<Vec<Rational64>> {
         let mut pivot = 0;
-        let mut rows = rref.len();
-        let mut cols = rref[0].len();
+        let rows = rref.len();
+        let cols = rref[0].len();
 
         'outer: for row in 0..rows {
             if pivot >= cols {
                 break;
             }
             let mut row_comp = row;
-            while rref[row_comp][pivot] == 0.0 {
+            while rref[row_comp][pivot].numer() == &0 {
                 row_comp += 1;
                 if row_comp == rows {
                     row_comp = row;
@@ -101,7 +112,7 @@ impl Machine {
             }
             rref.swap(row, row_comp);
             let value = rref[row][pivot];
-            if value != 0.0 {
+            if value.numer() != &0 {
                 for col in 0..cols {
                     rref[row][col] /= value;
                 }
@@ -113,7 +124,7 @@ impl Machine {
                 }
                 let value = rref[row_i][pivot];
                 for col in 0..cols {
-                    rref[row_i][col] -= value * rref[row][col];
+                    rref[row_i][col] = rref[row_i][col] - value * rref[row][col];
                 }
             }
             pivot += 1;
@@ -121,6 +132,69 @@ impl Machine {
 
         rref
     }
+
+    fn get_constraints(rref: &[Vec<Rational64>], pivots: &[usize]) -> Vec<usize> {
+        let num_free = rref[0].len() - pivots.len();
+        let mut constraints: Vec<usize> = vec![usize::MAX; num_free];
+        let mut pivot_idx = 0;
+
+        rref.iter()
+            .for_each(|row| {
+                let pivot = pivots[pivot_idx];
+                if row[pivot].numer() != &0 {
+                    let variables = row.iter()
+                        .enumerate()
+                        .filter(|(col, x)| x.numer() != &0 && *col != pivot)
+                        .map(|(_, x)| *x)
+                        .collect::<Vec<Rational64>>();
+                    println!("variables: {:?}", variables);
+                    // let constraint = variables[variables.len() - 1] - ;
+                    pivot_idx += 1;
+                }
+            });
+
+        constraints
+    }
+
+    fn get_pivots(rref: &[Vec<Rational64>]) -> Vec<usize> {
+        let mut pivots: Vec<usize> = vec![];
+        let rows = rref.len();
+        for col in 0..rref[0].len() {
+            let mut non_zero = 0;
+            for row in 0..rows {
+                if rref[row][col].numer() != &0 {
+                    non_zero += 1;
+                }
+            }
+            if non_zero == 1 {
+                pivots.push(col);
+            }
+        }
+        pivots
+    }
+
+    fn convert_rref_to_int(rref: &[Vec<Rational64>]) -> Vec<Vec<isize>> {
+        rref.iter()
+            .map(|row| {
+                row.iter()
+                    .map(|x| if x.is_integer() { x.to_integer() as isize } else {
+                        println!("x: {:?}", x);
+                        panic!("invalid value found!"); })
+                    .collect()
+            })
+        .collect()
+
+    }
+
+
+    // fn print_rref(rref: &Vec<Vec<Rational64>>) {
+    //     for row in rref {
+    //         for col in row {
+    //             print!("{}\t", col.to_integer());
+    //         }
+    //         println!();
+    //     }
+    // }
 }
 
 fn main() {
@@ -145,7 +219,7 @@ fn part_1(machines: &[Machine]) {
 
 fn part_2(machines: &[Machine]) {
     for machine in machines {
-        machine.get_rref();
+        machine.solve_joltage_presses();
     }
     println!("Part 2: {:?}", 0);
 }
