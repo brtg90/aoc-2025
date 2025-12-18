@@ -63,16 +63,9 @@ impl Machine {
     fn solve_joltage_presses(&self) -> usize {
         let rref = self.get_rref();
         let pivots = Self::get_pivots(&rref);
-        // println!("pivots: {:?}", pivots);
-        let mut detailed = false;
-        if self.joltage == vec![97, 74, 93, 57, 65, 79, 46, 51, 84, 79] ||
-            self.joltage == vec![63, 64, 76, 48, 59, 65, 47, 43, 55, 38] {
-            detailed = true;
-        }
+
         let constraints = self.get_constraints(&rref, &pivots);
-        if detailed {
-            println!("constraints: {:?}", constraints);
-        }
+
 
         let mut free_vars: Vec<usize> = constraints.keys().copied().collect();
         free_vars.sort();
@@ -100,17 +93,8 @@ impl Machine {
             &row_to_pivot,
             &mut min_total_presses,
         );
-        if min_total_presses == usize::MAX {
-            println!("Machine: {:?}", self.joltage);
-            println!("rref : {:?}", Self::print_rref(&rref));
-        }
-        // println!("current assignments: {:?}", current_assignments);
-        // let truth = self.verify_solution(&current_assignments);
-        // println!("Good solution?: {}", truth);
 
-        println!("Presses needed: {min_total_presses:#?}");
         min_total_presses
-
     }
 
     fn recursive_solve(
@@ -123,19 +107,15 @@ impl Machine {
         row_to_pivot: &HashMap<usize, usize>,
         min_total: &mut usize,
     ) {
-        // Base Case: All free variables have been assigned a value
         if free_idx == free_vars.len() {
             let mut current_sum = assignments.values().sum::<usize>();
 
-            // Pruning: if current sum already exceeds min, stop
             if current_sum >= *min_total { return; }
 
-            // Calculate the values for all PIVOT variables based on these free variables
             for (&row_idx, &pivot_col) in row_to_pivot {
                 let row = &rref[row_idx];
                 let target = row[row.len() - 1];
 
-                // Equation: Pivot = Target - Sum(coeff * FreeVariable)
                 let mut pivot_val = target;
                 for &f_col in free_vars {
                     let coeff = row[f_col];
@@ -143,22 +123,19 @@ impl Machine {
                     pivot_val -= coeff * f_val;
                 }
 
-                // Constraint Check: Pivot must be a non-negative integer
                 if pivot_val.numer() < &0 || !pivot_val.is_integer() {
-                    return; // Invalid combination
+                    return;
                 }
 
                 current_sum += pivot_val.to_integer() as usize;
             }
 
-            // If we made it here, it's a valid solution!
             if current_sum < *min_total {
                 *min_total = current_sum;
             }
             return;
         }
 
-        // Recursive Step: Try all values for the current free variable
         let f_col = free_vars[free_idx];
         let max_val = constraints[&f_col];
 
@@ -173,34 +150,13 @@ impl Machine {
                 row_to_pivot,
                 min_total,
             );
-
-            // Optimization: if even the smallest sum of free variables
-            // exceeds min_total, you could break early here.
         }
-    }
-
-    fn verify_solution(&self, solution: &HashMap<usize, usize>) -> bool {
-        let mut actual_joltage = vec![0; self.joltage.len()];
-
-        for (&btn_idx, &presses) in solution {
-            let buttons_lights = &self.buttons[btn_idx];
-            for &light_idx in buttons_lights {
-                if light_idx < actual_joltage.len() {
-                    actual_joltage[light_idx] += presses;
-                }
-            }
-        }
-        println!("{:?}", actual_joltage);
-        println!("{:?}", self.joltage);
-
-        actual_joltage == self.joltage
     }
 
     fn get_rref(&self) -> Vec<Vec<Rational64>> {
         let num_lights = self.get_num_lights();
         let mut rref: Vec<Vec<Rational64>> = vec![vec![Rational64::from_integer(0); self.buttons.len() + 1]; num_lights + 1];
 
-        // Initialize values
         for (col, button) in self.buttons.iter().enumerate() {
             button.iter()
                 .for_each(|&n| {
@@ -211,11 +167,8 @@ impl Machine {
         self.joltage.iter()
             .enumerate()
             .for_each(|(i, &l)| rref[i][self.buttons.len()] = Rational64::from_integer(l as i64));
-        // println!("Original: {:?}", Self::convert_rref_to_int(&rref));
 
         rref = Self::calculate_reduced_row_echelon_form(rref);
-        // println!("{:?}", rref);
-        // println!("Pivots {:?}", Self::get_pivots(&rref));
         rref
     }
 
@@ -262,28 +215,10 @@ impl Machine {
         rref
     }
 
-    // fn get_constraints(&self, pivots: &[usize]) -> HashMap<usize, (usize, usize)> {
-    //     let mut constraints = HashMap::new();
-    //     let num_buttons = self.buttons.len();
-    //
-    //     // Most puzzles of this type don't require pressing a single button
-    //     // more than 100 times. If you still get MAX, try 200.
-    //     let search_limit = 100;
-    //
-    //     for col_idx in 0..num_buttons {
-    //         if !pivots.contains(&col_idx) {
-    //             // Simply allow the search to explore 0..search_limit
-    //             constraints.insert(col_idx, (0, search_limit));
-    //         }
-    //     }
-    //     constraints
-    // }
-
     fn get_constraints(&self, rref: &[Vec<Rational64>], pivots: &[usize]) -> HashMap<usize, usize> {
         let mut constraints: HashMap<usize, usize> = HashMap::new();
         let num_buttons = self.buttons.len();
 
-        // Initialize all free variables with a sensible global limit.
         // A button can never be pressed more times than the max joltage requirement.
         let global_max = self.joltage.iter().max().cloned().unwrap_or(0);
 
@@ -293,76 +228,8 @@ impl Machine {
             }
         }
 
-        for row in rref {
-            let target = row[num_buttons];
-            // If the target is negative, this specific RREF state might be tricky,
-            // but for these puzzles, targets are usually non-negative.
-            if target.numer() < &0 {
-                continue;
-            }
-            for col_idx in 0..num_buttons {
-                if !pivots.contains(&col_idx) {
-                    let coeff = row[col_idx];
-                    // Only a positive coefficient limits how LARGE a free variable can be.
-                    if coeff.numer() > &0 {
-                        let limit = (target / coeff).to_integer() as usize;
-                        constraints.entry(col_idx).and_modify(|e| *e = (*e).min(limit));
-                    }
-                }
-            }
-        }
         constraints
     }
-
-    // fn get_constraints(&self, rref: &[Vec<Rational64>], pivots: &[usize]) -> HashMap<usize, usize> {
-    //     let mut constraints: HashMap<usize, usize> = HashMap::new();
-    //     (0..self.buttons.len())
-    //         .filter(|x| !pivots.contains(x))
-    //         .for_each(|x| {
-    //             constraints.insert(x, usize::MAX);
-    //         });
-    //
-    //     let mut order = vec![];
-    //     for (i, row) in rref.iter().enumerate() {
-    //         let counts = row.iter()
-    //             .enumerate()
-    //             .filter(|(j, x)| !pivots.contains(j) && x.numer() != &0)
-    //             .count();
-    //         if counts != 0 {
-    //             order.push((i, counts));
-    //         }
-    //     }
-    //     order.sort_by_key(|x| x.1);
-    //
-    //     for i in 0..order.len() {
-    //         let row_idx = order[i].0;
-    //         let row = &rref[row_idx];
-    //         let target = row[row.len() - 1];
-    //         let components = row[..row.len() -1].iter()
-    //             .enumerate()
-    //             .filter(|(col, x)| x.numer() != &0 && !pivots.contains(col))
-    //             .collect::<Vec<_>>();
-    //         for (i, component) in &components {
-    //             let new_target = target - components.iter()
-    //                 .filter(|(j, c)| c!= component)
-    //                 .map(|(j, c)| Rational64::from_integer(constraints[j] as i64) * row[*j])
-    //                 .sum::<Rational64>();
-    //             let mut max: Rational64 = new_target / *component;
-    //             if !max.is_integer() {
-    //                 let denom = max.denom();
-    //                 max = max * denom;
-    //                 assert_eq!(max.is_integer(), true);
-    //             }
-    //             let mut max = max.to_integer() as usize;
-    //             constraints.entry(*i)
-    //                 .and_modify(|e| *e = *e.min(&mut max));
-    //         }
-    //     }
-    //     // println!("constraints: {:?}", constraints);
-    //     assert!(!constraints.values().any(|v| *v == usize::MAX));
-    //
-    //     constraints
-    // }
 
     fn get_pivots(rref: &[Vec<Rational64>]) -> Vec<usize> {
         let mut pivots = Vec::new();
@@ -373,49 +240,10 @@ impl Machine {
         }
         pivots
     }
-
-    // fn get_pivots(rref: &[Vec<Rational64>]) -> Vec<usize> {
-    //     let mut pivots: Vec<usize> = vec![];
-    //     let rows = rref.len();
-    //     for col in 0..rref[0].len() {
-    //         let mut non_zero = 0;
-    //         for row in 0..rows {
-    //             if rref[row][col].numer() != &0 {
-    //                 non_zero += 1;
-    //             }
-    //         }
-    //         if non_zero == 1 {
-    //             pivots.push(col);
-    //         }
-    //     }
-    //     pivots
-    // }
-
-    fn convert_rref_to_int(rref: &[Vec<Rational64>]) -> Vec<Vec<isize>> {
-        rref.iter()
-            .map(|row| {
-                row.iter()
-                    .map(|x| if x.is_integer() { x.to_integer() as isize } else {
-                        println!("x: {:?}", x);
-                        panic!("invalid value found!"); })
-                    .collect()
-            })
-        .collect()
-
-    }
-
-    fn print_rref(rref: &[Vec<Rational64>]) {
-        for row in rref {
-            for col in row {
-                print!("{}\t", col.to_string());
-            }
-            println!();
-        }
-    }
 }
 
 fn main() {
-    let machines = parse_machines("inputs/day10pt3.txt");
+    let machines = parse_machines("inputs/day10pt1.txt");
     part_1(&machines);
     part_2(&machines);
 }
