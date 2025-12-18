@@ -5,6 +5,11 @@ use regex::Regex;
 
 use utils::read_lines;
 
+struct RowConstraint {
+    target: Rational64,
+    free_coeffs: Vec<(usize, Rational64)>,
+}
+
 #[derive(Debug)]
 struct Machine {
     lights: usize,
@@ -63,34 +68,43 @@ impl Machine {
     fn solve_joltage_presses(&self) -> usize {
         let rref = self.get_rref();
         let pivots = Self::get_pivots(&rref);
+        let num_buttons = self.buttons.len();
 
-        let constraints = self.get_constraints(&rref, &pivots);
-
-
-        let mut free_vars: Vec<usize> = constraints.keys().copied().collect();
+        let constraints_map = self.get_constraints(&pivots);
+        let mut free_vars = Vec::new();
+        let mut max_presses = vec![0; num_buttons];
+        for (&col, &max) in &constraints_map {
+            free_vars.push(col);
+            max_presses[col] = max;
+        }
         free_vars.sort();
 
-        let mut row_to_pivot = HashMap::new();
-        for (r_idx, row) in rref.iter().enumerate() {
-            if let Some(c_idx) = row.iter().position(|val| val.numer() != &0) {
-                // This excludes rows with all zeros and rows with all zeros but the target, i.e.,
-                // invalid rows
-                if pivots.contains(&c_idx) {
-                    row_to_pivot.insert(r_idx, c_idx);
+        let mut row_constraints = Vec::new();
+        for row in rref.iter() {
+            if let Some(p_col) = row.iter().take(num_buttons).position(|v| v.numer() != &0)
+                && pivots.contains(&p_col) {
+                    let mut free_coeffs = Vec::new();
+                    for &f_col in &free_vars {
+                        if row[f_col].numer() != &0 {
+                            free_coeffs.push((f_col, row[f_col]));
+                        }
+                    }
+                    row_constraints.push(RowConstraint {
+                        target: row[num_buttons],
+                        free_coeffs,
+                    });
                 }
-            }
         }
-
         let mut min_total_presses = usize::MAX;
-        let mut current_assignments = HashMap::new();
+        let mut assignments = vec![0; num_buttons];
 
-        self.recursive_solve(
+        Self::recursive_solve(
             0,
             &free_vars,
-            &mut current_assignments,
-            &constraints,
-            &rref,
-            &row_to_pivot,
+            &mut assignments,
+            &max_presses,
+            &row_constraints,
+            0,
             &mut min_total_presses,
         );
 
@@ -98,60 +112,61 @@ impl Machine {
     }
 
     fn recursive_solve(
-        &self,
         free_idx: usize,
         free_vars: &[usize],
-        assignments: &mut HashMap<usize, usize>,
-        constraints: &HashMap<usize, usize>,
-        rref: &[Vec<Rational64>],
-        row_to_pivot: &HashMap<usize, usize>,
+        assignments: &mut [usize],
+        max_presses: &[usize],
+        row_constraints: &[RowConstraint],
+        current_sum: usize,
         min_total: &mut usize,
     ) {
+        if current_sum >= *min_total {
+            return;
+        }
+
         if free_idx == free_vars.len() {
-            let mut current_sum = assignments.values().sum::<usize>();
+            let mut total_with_pivots = current_sum;
 
-            if current_sum >= *min_total { return; }
-
-            for (&row_idx, &pivot_col) in row_to_pivot {
-                let row = &rref[row_idx];
-                let target = row[row.len() - 1];
-
-                let mut pivot_val = target;
-                for &f_col in free_vars {
-                    let coeff = row[f_col];
-                    let f_val = Rational64::from_integer(assignments[&f_col] as i64);
-                    pivot_val -= coeff * f_val;
+            for rc in row_constraints {
+                let mut pivot_val = rc.target;
+                for &(f_col, coeff) in &rc.free_coeffs {
+                    pivot_val -= coeff * Rational64::from_integer(assignments[f_col] as i64);
                 }
 
                 if pivot_val.numer() < &0 || !pivot_val.is_integer() {
                     return;
                 }
 
-                current_sum += pivot_val.to_integer() as usize;
+                total_with_pivots += pivot_val.to_integer() as usize;
+
+                if total_with_pivots >= *min_total {
+                    return;
+                }
             }
 
-            if current_sum < *min_total {
-                *min_total = current_sum;
+            if total_with_pivots < *min_total {
+                *min_total = total_with_pivots;
             }
             return;
         }
 
         let f_col = free_vars[free_idx];
-        let max_val = constraints[&f_col];
+        let max_val = max_presses[f_col];
 
         for val in 0..=max_val {
-            assignments.insert(f_col, val);
-            self.recursive_solve(
+            assignments[f_col] = val;
+            Self::recursive_solve(
                 free_idx + 1,
                 free_vars,
                 assignments,
-                constraints,
-                rref,
-                row_to_pivot,
+                max_presses,
+                row_constraints,
+                current_sum + val,
                 min_total,
             );
         }
     }
+
 
     fn get_rref(&self) -> Vec<Vec<Rational64>> {
         let num_lights = self.get_num_lights();
@@ -215,7 +230,7 @@ impl Machine {
         rref
     }
 
-    fn get_constraints(&self, rref: &[Vec<Rational64>], pivots: &[usize]) -> HashMap<usize, usize> {
+    fn get_constraints(&self, pivots: &[usize]) -> HashMap<usize, usize> {
         let mut constraints: HashMap<usize, usize> = HashMap::new();
         let num_buttons = self.buttons.len();
 
