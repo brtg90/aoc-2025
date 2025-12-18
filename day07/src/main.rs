@@ -1,35 +1,94 @@
+use std::collections::{HashMap, HashSet};
+
 use utils::read_lines;
 
 fn main() {
-    part_1();
-    part_2();
-}
-
-fn part_1() {
     let (splitters, start, width) = parse("inputs/day07pt1.txt");
-    let beams = count_splitted_beams(&splitters, start, width);
-    println!("Part 1: {:?}", beams);
+    let (visited, endpoints) =  get_visited_splitters_and_endpoints(&splitters, start, width);
+    part_1(&visited);
+    part_2(visited, endpoints, width);
 }
 
-fn part_2() {
-    println!("Part 2: {:?}", 0);
+fn part_1(visited: &HashSet<(usize, usize)>) {
+    println!("Part 1: {:?}", visited.len());
 }
 
-fn count_splitted_beams(splitters: &[Vec<usize>], start: usize, width: usize) -> usize {
-    let mut beams = 0;
+fn part_2(visited: HashSet<(usize, usize)>, endpoints: Vec<(usize, usize)>, width: usize) {
+    let mut timeline_map: HashMap<(usize, usize), usize> = HashMap::new();
+    let start = visited.iter().min_by_key(|x| x.0).unwrap().to_owned();
+    let height = visited.iter().max_by_key(|x| x.0).unwrap().0;
 
-    let mut current = vec![start];
-    for row in splitters {
+    let timelines = calculate_number_timelines(&visited, &endpoints, start, &mut timeline_map, width, height);
+    println!("Part 2: {:?}", timelines);
+}
+
+fn calculate_number_timelines(
+    visited: &HashSet<(usize, usize)>,
+    endpoints: &[(usize, usize)],
+    current: (usize, usize),
+    timeline_map: &mut HashMap<(usize, usize), usize>,
+    width: usize,
+    height: usize,
+) -> usize {
+    let mut timelines = 0;
+
+    if let Some(paths) = timeline_map.get(&current) {
+        return *paths;
+    }
+
+    let cols = get_valid_neighbors(&current.1, width);
+
+    for col in cols {
+        let mut row = current.0;
+        let mut count = false;
+
+        while row < height {
+            row += 1;
+
+            if visited.contains(&(row, col)) {
+                count = true;
+                timelines += calculate_number_timelines(visited, endpoints, (row, col), timeline_map, width, height);
+                break;
+            }
+
+            if endpoints.contains(&(row, col)) {
+                timelines += 1;
+                count = true;
+                break;
+            }
+        }
+        if !count && row >= height {
+            timelines += 1;
+        }
+    }
+
+    timeline_map.insert(current, timelines);
+
+    timelines
+
+}
+
+fn get_visited_splitters_and_endpoints(
+    splitters: &[Vec<usize>],
+    start: usize, width: usize,
+) -> (HashSet<(usize, usize)>, Vec<(usize, usize)>) {
+    let mut visited = HashSet::new();
+
+    let mut current = vec![(0, start)];
+    for (row_no, row) in splitters.iter().enumerate() {
         for splitter in row {
-            if current.contains(splitter) {
-                beams += 1;
+            let current_cols: Vec<_> = current.iter().map(|(_, col)| *col).collect();
+            if current_cols.contains(splitter) {
                 get_valid_neighbors(splitter, width)
-                    .iter().for_each(|&x| current.push(x));
-                current.retain(|&x| x != *splitter);
+                    .iter().for_each(|&x| {
+                    current.push((row_no, x));
+                });
+                current.retain(|&x| x.1 != *splitter);
+                visited.insert((row_no, *splitter));
             }
         }
     }
-    beams
+    (visited, current)
 }
 
 fn get_valid_neighbors(pos: &usize, width: usize) -> Vec<usize> {
